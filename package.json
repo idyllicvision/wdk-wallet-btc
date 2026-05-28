@@ -25,11 +25,13 @@
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
+    "@idyllicvision/bare-universal-signer": "^1.0.0-beta.2",
     "@bitcoinerlab/coinselect": "1.3.1",
     "@bitcoinerlab/descriptors": "2.3.1",
     "@bitcoinerlab/secp256k1": "1.2.0",
     "@mempool/electrum-client": "1.1.9",
     "@tetherto/wdk-wallet": "^1.0.0-beta.1",
+    "bare-buffer": "3.4.2",
     "bare-node-runtime": "^1.1.4",
     "bip32": "4.0.0",
     "bip39": "3.1.0",
@@ -51,6 +53,9 @@
       "types": "./types/index.d.ts",
       "bare": "./bare.js",
       "default": "./index.js"
+    },
+    "./signers": {
+      "default": "./src/signers/index.js"
     },
     "./package": {
       "default": "./package.json"
