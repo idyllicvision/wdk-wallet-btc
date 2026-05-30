@@ -40,7 +40,7 @@ jobs:
         # npm.pkg.github.com requires auth even for public reads of
         # @idyllicvision/bare-universal-signer.
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
         run: npm clean-install
 
       - name: Lint code with standard
@@ -93,13 +93,13 @@ jobs:
         # to $NPM_CONFIG_USERCONFIG; that placeholder is expanded at npm
         # invocation time, so NODE_AUTH_TOKEN must be set on this step too.
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
         run: npm clean-install
 
       - name: Compute next beta version
         # npm view against GitHub Packages requires auth even for public reads.
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
         run: |
           # Capture into a local var first: `echo "VAR=$(cmd)" >> file` does
           # not propagate $(cmd)'s exit code under pipefail, and $GITHUB_ENV
@@ -124,10 +124,10 @@ jobs:
       # regression leaving the job half-done.
       - name: Verify publish (dry-run)
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
         run: npm publish --dry-run
 
       - name: Publish to GitHub Packages
         run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
