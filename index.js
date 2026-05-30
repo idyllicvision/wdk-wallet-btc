@@ -30,8 +30,8 @@ export { default as WalletAccountReadOnlyBtc } from './src/wallet-account-read-o
 
 export { default as WalletAccountBtc } from './src/wallet-account-btc.js'
 
-export { default as BtcSigner, BareHDSigner } from './src/signers/btc-signer.js'
-export { default as PrivateKeyBtcSigner } from './src/signers/keychain-private-key-signer-btc.js'
+export { default as BtcSigner, BareHDSigner } from './src/signers/bare-seed-btc-signer.js'
+export { default as PrivateKeyBtcSigner } from './src/signers/bare-private-key-signer-btc.js'
 export { getDefaultBareSigner } from './src/bare-signer.js'
 export {
   buildPaymentScript,

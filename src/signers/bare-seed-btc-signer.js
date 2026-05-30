@@ -22,7 +22,7 @@ globalThis.Buffer = Buffer
  * @property {import('@idyllicvision/bare-universal-signer').Signer} [bareSigner] - Signer instance
  * @property {number} [bip=84] - BIP standard (44 or 84)
  * @property {string} [path] - Derivation path
- * @property {'mainnet'|'testnet'} [network='testnet'] - Network
+ * @property {'bitcoin'|'testnet'|'regtest'} [network='bitcoin'] - Network
  * @property {Object} [keychainOpts={}] - Keychain options
  */
 
@@ -133,11 +133,26 @@ export class BareHDSigner {
 
 const defaultPath = "m/84'/0'/0'/0/0"
 const defaultBIP = 84
+const defaultNetwork = 'bitcoin'
+
+// Networks supported across the package (matches WalletAccountReadOnlyBtc and
+// bitcoinjs-lib's `networks` keys). 'bitcoin' is mainnet.
+const VALID_NETWORKS = ['bitcoin', 'testnet', 'regtest']
+
+// BIP-44 coin type: mainnet ('bitcoin') = 0, all test networks = 1.
+function coinTypeForNetwork (network) {
+  return network === 'bitcoin' ? '0' : '1'
+}
+
+// Resolve a package network name to a bitcoinjs-lib network object.
+function resolveBitcoinNetwork (network) {
+  return networks[network] || networks.bitcoin
+}
 
 /**
  * Bitcoin signer with BIP-44/84 support.
  */
-export default class BtcSigner {
+export default class BareSeedBtcSigner {
   /**
    * Create a new BTC signer.
    * @param {BtcSignerConfig} [config={}] - Configuration options
@@ -147,7 +162,7 @@ export default class BtcSigner {
       bareSigner: null,
       bip: 84,
       path: defaultPath,
-      network: 'testnet',
+      network: defaultNetwork,
       keychainOpts: {}
     }
   ) {
@@ -155,8 +170,8 @@ export default class BtcSigner {
     if (config.bip && ![44, 84].includes(config.bip)) {
       throw new Error('Invalid BIP: must be 44 or 84')
     }
-    if (config.network && !['mainnet', 'testnet'].includes(config.network)) {
-      throw new Error('Invalid network: must be mainnet or testnet')
+    if (config.network && !VALID_NETWORKS.includes(config.network)) {
+      throw new Error(`Invalid network: must be one of ${VALID_NETWORKS.join(', ')}`)
     }
     if (config.path && !/^m(\/\d+'?)+$/.test(config.path)) {
       throw new Error('Invalid path format')
@@ -168,7 +183,7 @@ export default class BtcSigner {
     this._isActive = true
     this._bip = config.bip || defaultBIP
     this._path = config.path || defaultPath
-    this._network = config.network || 'testnet'
+    this._network = config.network || defaultNetwork
     this._isRoot = true
     this._config = normalizeConfig({
       bip: this._bip,
@@ -218,7 +233,7 @@ export default class BtcSigner {
    * Derive a child signer from this signer.
    * @param {string} relPath - Relative derivation path (e.g., "0'/0/0")
    * @param {object} [config={}] - Optional configuration overrides
-   * @returns {BtcSigner} A new child signer with the derived path
+   * @returns {BareSeedBtcSigner} A new child signer with the derived path
    */
   derive (relPath, config = {}) {
     if (!relPath || typeof relPath !== 'string') {
@@ -228,12 +243,12 @@ export default class BtcSigner {
       throw new Error('Invalid relative path format: expected format like "0\'/0/0"')
     }
 
-    // Construct full path: m/84'/0'/0'/0/0 for mainnet, m/84'/1'/0'/0/0 for testnet
+    // Construct full path: m/84'/0'/0'/0/0 for mainnet, m/84'/1'/0'/0/0 for testnet/regtest
     // relPath comes as "0'/0/0" (account/change/index)
-    const coinType = this._network === 'mainnet' ? '0' : '1'
+    const coinType = coinTypeForNetwork(this._network)
     const fullPath = `m/${this._bip}'/${coinType}'/${relPath}`
 
-    const childSigner = new BtcSigner({
+    const childSigner = new BareSeedBtcSigner({
       bareSigner: this._bareSigner,
       bip: this._bip,
       path: fullPath,
@@ -255,9 +270,7 @@ export default class BtcSigner {
       opts: this._keychainOpts
     })
     const pubkeyBuffer = Buffer.from(pubkey)
-    // Map 'mainnet' to 'bitcoin' for bitcoinjs-lib compatibility
-    const networkName = this._network === 'mainnet' ? 'bitcoin' : this._network
-    const network = networks[networkName] || networks.testnet
+    const network = resolveBitcoinNetwork(this._network)
     const address = getAddressFromPublicKey(pubkeyBuffer, network, this._bip)
     return address
   }
@@ -291,10 +304,10 @@ export default class BtcSigner {
       throw new Error('Invalid master fingerprint format')
     }
 
-    // Map 'mainnet' to 'bitcoin' for bitcoinjs-lib compatibility
-    const networkName = this._config.network === 'mainnet' ? 'bitcoin' : this._config.network
-    const network = networks[networkName] || networks.testnet
+    const network = resolveBitcoinNetwork(this._config.network)
     const myScript = buildPaymentScript(this._bip, pubkey, network)
+
+    const errors = []
 
     for (let i = 0; i < psbtInstance.inputCount; i++) {
       const { input, prevOut, isOurs } = detectInputOwnership(
@@ -337,8 +350,18 @@ export default class BtcSigner {
 
         await psbtInstance.signInputHDAsync(i, bareHdSigner)
       } catch (err) {
-        console.warn(`Skipping input ${i} signing:`, err)
+        // Only inputs owned by this signer reach here (non-owned inputs are
+        // skipped above). A failure means signing is incomplete, so collect
+        // it and surface it after the loop rather than silently returning a
+        // PSBT that looks fully signed.
+        errors.push(new Error(`Failed to sign input ${i}: ${err.message}`))
       }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(
+        `signPsbt failed for ${errors.length} input(s): ${errors.map((e) => e.message).join('; ')}`
+      )
     }
 
     return psbtInstance.toBase64()
@@ -431,9 +454,13 @@ export default class BtcSigner {
             if (!sig) {
               throw new Error('Signature is undefined')
             }
+            // The bare signer returns a 65-byte recovered signature laid out
+            // as [recovery(1), r(32), s(32)]. bitcoinjs-message expects the
+            // 64-byte r||s in `signature` and the recovery id separately.
+            const buf = Buffer.from(sig)
             return {
-              signature: Buffer.from(sig),
-              recovery: 0
+              signature: buf.subarray(1),
+              recovery: buf[0]
             }
           })
           .catch((err) => {
@@ -487,4 +514,4 @@ export default class BtcSigner {
   }
 }
 
-export { BtcSigner }
+export { BareSeedBtcSigner as BtcSigner }

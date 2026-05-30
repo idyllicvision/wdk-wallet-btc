@@ -22,13 +22,14 @@
     "lint": "standard",
     "lint:fix": "standard --fix",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.unit.config.js",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
-    "@idyllicvision/bare-universal-signer": "^1.0.0-beta.2",
     "@bitcoinerlab/coinselect": "1.3.1",
     "@bitcoinerlab/descriptors": "2.3.1",
     "@bitcoinerlab/secp256k1": "1.2.0",
+    "@idyllicvision/bare-universal-signer": "^1.0.0-beta.2",
     "@mempool/electrum-client": "1.1.9",
     "@tetherto/wdk-wallet": "^1.0.0-beta.1",
     "bare-buffer": "3.4.2",
